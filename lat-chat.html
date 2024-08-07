@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robust LLaMa 3 8B Chat Interface - Research Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            background-color: #1e1e1e;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+        }
+        #announcement-container {
+            width: 100%;
+            background-color: #6a0dad;
+            display: flex;
+            justify-content: center;
+            border-bottom-left-radius: 15px;
+            border-bottom-right-radius: 15px;
+        }
+        #announcement {
+            max-width: 800px;
+            padding: 15px;
+            text-align: center;
+            font-weight: bold;
+        }
+        #announcement a {
+            color: #4a9eff;
+            text-decoration: none;
+            transition: opacity 0.3s ease;
+            font-weight: bold;
+        }
+        #announcement a:hover {
+            opacity: 0.8;
+        }
+        #chat-container {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            width: 100%;
+        }
+        #chat-messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        .message {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+        .message-content {
+            padding: 10px;
+            border-radius: 10px;
+            max-width: calc(70% - 40px);
+        }
+        .user-message {
+            flex-direction: row-reverse;
+        }
+        .user-message .message-content {
+            background-color: #2b2b2b;
+            margin-right: 10px;
+        }
+        .ai-message .message-content {
+            background-color: #3a3a3a;
+            margin-left: 10px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+        }
+        .user-icon {
+            background-color: #4a4a4a;
+        }
+        .ai-icon {
+            background-color: #6a6a6a;
+        }
+        #input-area {
+            display: flex;
+            padding: 20px;
+            background-color: #2b2b2b;
+            align-items: flex-end;
+        }
+        #message-input {
+            flex-grow: 1;
+            padding: 12px 15px;
+            border: 2px solid #4a4a4a;
+            border-radius: 20px;
+            background-color: #3a3a3a;
+            color: #ffffff;
+            resize: none;
+            min-height: 20px;
+            max-height: 150px;
+            overflow-y: auto;
+            font-size: 14px;
+            line-height: 1.4;
+            transition: border-color 0.3s ease;
+        }
+        #message-input:focus {
+            outline: none;
+            border-color: #6a0dad;
+        }
+        #send-button {
+            background-color: #6a0dad;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            margin-left: 10px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background-color 0.3s ease;
+        }
+        #send-button:hover {
+            background-color: #8a2be2;
+        }
+        #send-button svg {
+            width: 20px;
+            height: 20px;
+            fill: #ffffff;
+        }
+        .error-message {
+            color: #ff4444;
+        }
+    </style>
+</head>
+<body>
+    <div id="announcement-container">
+        <div id="announcement">
+            This is a research demo. For more information, please read <a href="https://arxiv.org/abs/2407.15549" target="_blank">our paper</a>.
+        </div>
+    </div>
+    <div id="chat-container">
+        <div id="chat-messages"></div>
+        <div id="input-area">
+            <textarea id="message-input" placeholder="Message Robust LLaMa 3 8B" rows="1"></textarea>
+            <button id="send-button">
+                <svg viewBox="0 0 24 24">
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const chatMessages = document.getElementById('chat-messages');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+
+        const API_URL = "https://h3xdlk5tqqk640gt.us-east-1.aws.endpoints.huggingface.cloud";
+
+        const systemPrompt = "You are a helpful, respectful and honest assistant. " +
+                             "Always answer as helpfully as possible, while being safe. " +
+                             "Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. " +
+                             "Please ensure that your responses are socially unbiased and positive in nature. " +
+                             "If a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. " +
+                             "If you don't know the answer to a question, please don't share false information.";
+
+        const forbiddenSubstrings = ["<|start_header_id|>", "<|end_header_id|>", "<|eot_id|>"];
+
+        function addMessage(message, isUser = true) {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message');
+            messageElement.classList.add(isUser ? 'user-message' : 'ai-message');
+            
+            const iconElement = document.createElement('div');
+            iconElement.classList.add('icon');
+            iconElement.classList.add(isUser ? 'user-icon' : 'ai-icon');
+            iconElement.textContent = isUser ? 'U' : 'AI';
+            
+            const contentElement = document.createElement('div');
+            contentElement.classList.add('message-content');
+            contentElement.textContent = message;
+            
+            messageElement.appendChild(iconElement);
+            messageElement.appendChild(contentElement);
+            chatMessages.appendChild(messageElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            return contentElement;
+        }
+
+        function getInput(systemPrompt, prompt) {
+            return `<|start_header_id|>system<|end_header_id|>\n\n${systemPrompt}<|eot_id|>` +
+                   `<|start_header_id|>user<|end_header_id|>\n\n${prompt}<|eot_id|>` +
+                   `<|start_header_id|>assistant<|end_header_id|>\n\n`;
+        }
+
+        async function queryAPI(payload) {
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('Error:', error);
+                throw new Error('Failed to fetch response from API');
+            }
+        }
+
+        function streamMessage(message, element) {
+            return new Promise((resolve) => {
+                let index = 0;
+                function addNextChar() {
+                    if (index < message.length) {
+                        element.textContent += message[index];
+                        index++;
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                        setTimeout(addNextChar, 5 + Math.random() * 15); // Random delay between 5-20ms
+                    } else {
+                        resolve();
+                    }
+                }
+                addNextChar();
+            });
+        }
+
+        function containsForbiddenSubstrings(message) {
+            return forbiddenSubstrings.some(substring => message.includes(substring));
+        }
+
+        function resetChatWindow() {
+            chatMessages.innerHTML = '';
+        }
+
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (message) {
+                if (chatMessages.children.length > 0) {
+                    resetChatWindow();
+                }
+
+                addMessage(message, true);
+                messageInput.value = '';
+                messageInput.style.height = 'auto';
+                
+                const aiMessageElement = addMessage("", false);
+                
+                if (containsForbiddenSubstrings(message)) {
+                    aiMessageElement.classList.add('error-message');
+                    await streamMessage("Error: Your message contains forbidden substrings. Please remove any instances of <|start_header_id|>, <|end_header_id|>, or <|eot_id|> and try again.", aiMessageElement);
+                    return;
+                }
+
+                const payload = {
+                    inputs: getInput(systemPrompt, message),
+                    parameters: {
+                        max_new_tokens: 1024
+                    }
+                };
+
+                try {
+                    const output = await queryAPI(payload);
+                    if (output.error) {
+                        throw new Error(output.error);
+                    }
+                    const response = output[0].generated_text.split("assistant<|end_header_id|>")[1].replace("<|eot_id|>", "").trim();
+                    await streamMessage(response, aiMessageElement);
+                } catch (error) {
+                    console.error('Error:', error);
+                    aiMessageElement.classList.add('error-message');
+                    await streamMessage(`Error: ${error.message}`, aiMessageElement);
+                }
+            }
+        }
+
+        messageInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+        });
+
+        sendButton.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
