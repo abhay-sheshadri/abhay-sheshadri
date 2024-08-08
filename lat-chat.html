@@ -278,7 +278,7 @@
                 } catch (error) {
                     console.error('Error:', error);
                     aiMessageElement.classList.add('error-message');
-                    await streamMessage(`Error: ${error.message}`, aiMessageElement);
+                    await streamMessage("The endpoint goes inactive after 15 minutes of inactivity, so when the first query is sent to the model, it needs time to start up. Please wait approximately 5 minutes for the model to initialize and try again.", aiMessageElement);
                 }
             }
         }
