@@ -263,7 +263,8 @@
                 const payload = {
                     inputs: getInput(systemPrompt, message),
                     parameters: {
-                        max_new_tokens: 1024
+                        max_new_tokens: 1024,
+			do_sample: false
                     }
                 };
 
