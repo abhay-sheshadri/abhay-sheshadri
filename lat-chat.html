@@ -81,6 +81,8 @@
             padding: 10px;
             border-radius: 10px;
             max-width: calc(70% - 40px);
+            word-wrap: break-word;
+            white-space: pre-wrap;
         }
         .user-message {
             flex-direction: row-reverse;
@@ -92,8 +94,6 @@
         .ai-message .message-content {
             background-color: #3a3a3a;
             margin-left: 10px;
-            white-space: pre-wrap;
-            word-wrap: break-word;
         }
         .icon {
             width: 30px;
@@ -157,7 +157,9 @@
             fill: #ffffff;
         }
         .error-message {
-            color: #ff4444;
+            color: #ff4444 !important;
+            background-color: rgba(255, 68, 68, 0.1) !important;
+            border: 1px solid #ff4444 !important;
         }
     </style>
 </head>
@@ -196,6 +198,8 @@
 
         const forbiddenSubstrings = ["<|start_header_id|>", "<|end_header_id|>", "<|eot_id|>"];
 
+        let isProcessing = false;
+
         function addMessage(message, isUser = true) {
             const messageElement = document.createElement('div');
             messageElement.classList.add('message');
@@ -233,10 +237,19 @@
                     },
                     body: JSON.stringify(payload)
                 });
-                return await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                if (!data || !data[0] || !data[0].generated_text) {
+                    throw new Error('API_UNAVAILABLE');
+                }
+                return data;
             } catch (error) {
                 console.error('Error:', error);
-                throw new Error('Failed to fetch response from API');
+                throw new Error('API_UNAVAILABLE');
             }
         }
 
@@ -266,8 +279,13 @@
         }
 
         async function sendMessage() {
+            if (isProcessing) return;
+            
             const message = messageInput.value.trim();
             if (message) {
+                isProcessing = true;
+                sendButton.disabled = true;
+                
                 if (chatMessages.children.length > 0) {
                     resetChatWindow();
                 }
@@ -281,6 +299,8 @@
                 if (containsForbiddenSubstrings(message)) {
                     aiMessageElement.classList.add('error-message');
                     await streamMessage("Error: Your message contains forbidden substrings. Please remove any instances of <|start_header_id|>, <|end_header_id|>, or <|eot_id|> and try again.", aiMessageElement);
+                    isProcessing = false;
+                    sendButton.disabled = false;
                     return;
                 }
 
@@ -300,9 +320,15 @@
                     const response = output[0].generated_text.split("assistant<|end_header_id|>")[1].replace("<|eot_id|>", "").trim();
                     await streamMessage(response, aiMessageElement);
                 } catch (error) {
-                    console.error('Error:', error);
                     aiMessageElement.classList.add('error-message');
-                    await streamMessage("The endpoint goes inactive after 15 minutes of inactivity, so when the first query is sent to the model, it needs time to start up. Please wait approximately 5 minutes for the model to initialize and try again.", aiMessageElement);
+                    if (error.message === 'API_UNAVAILABLE') {
+                        await streamMessage("The endpoint is currently inactive. Please wait approximately 5 minutes for the model to initialize and try again. This happens after 15 minutes of inactivity.", aiMessageElement);
+                    } else {
+                        await streamMessage("An error occurred while processing your request. Please try again later.", aiMessageElement);
+                    }
+                } finally {
+                    isProcessing = false;
+                    sendButton.disabled = false;
                 }
             }
         }
